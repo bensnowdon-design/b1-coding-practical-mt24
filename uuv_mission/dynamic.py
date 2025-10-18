@@ -105,10 +105,31 @@ class ClosedLoop:
         actions = np.zeros(T)
         self.plant.reset_state()
 
+        # If the controller has a reset method, call it to clear state (e.g., previous error)
+        if hasattr(self.controller, 'reset'):
+            try:
+                self.controller.reset()
+            except Exception:
+                pass
+
         for t in range(T):
             positions[t] = self.plant.get_position()
             observation_t = self.plant.get_depth()
-            # Call your controller here
+
+            # Compute reference for this time step
+            reference_t = mission.reference[t]
+
+            # Controller may be a callable or an object with a `control` method
+            if callable(self.controller):
+                action_t = self.controller(reference_t, observation_t)
+            elif hasattr(self.controller, 'control'):
+                action_t = self.controller.control(reference_t, observation_t)
+            else:
+                raise TypeError('Controller must be callable or implement a control(reference, observation) method')
+
+            actions[t] = float(action_t)
+
+            # Apply transition with action and disturbance
             self.plant.transition(actions[t], disturbances[t])
 
         return Trajectory(positions)
